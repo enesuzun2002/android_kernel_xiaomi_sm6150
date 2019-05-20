@@ -1,4 +1,3 @@
-# SPDX-License-Identifier: GPL-2.0-only
 config F2FS_FS
 	tristate "F2FS filesystem support"
 	depends on BLOCK

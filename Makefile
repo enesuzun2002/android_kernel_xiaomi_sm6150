@@ -705,10 +705,15 @@ export CFLAGS_GCOV
 # ar/cc/ld-* macros return correct values.
 ifdef CONFIG_LTO_CLANG
 ifneq ($(ld-name),lld)
+ifneq ($(LLVM),)
+# LLVM builds must use the LLVM linker directly.  Older Kbuild versions can
+# mis-detect newer LLD banners and otherwise select the unavailable gold path.
+else
 # use GNU gold with LLVMgold for LTO linking, and LD for vmlinux_link
 LDFINAL_vmlinux := $(LD)
 LD		:= $(LDGOLD)
 LDFLAGS		+= -plugin LLVMgold.so
+endif
 endif
 # use llvm-ar for building symbol tables from IR files, and llvm-dis instead
 # of objdump for processing symbol versions and exports

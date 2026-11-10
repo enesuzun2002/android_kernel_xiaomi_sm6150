@@ -633,9 +633,28 @@ $($(subst $(obj)/,,$(@:.o=-m)))), $^)
 cmd_link_multi-link = $(LD) $(ld_flags) -r -o $@ $(link_multi_deps) $(cmd_secanalysis)
 
 quiet_cmd_link_multi-y = AR      $@
+ifdef CONFIG_LTO_CLANG
+# Large composite objects (e.g. qcacld-3.0) list enough objects to exceed
+# the kernel's per-argument limit for "sh -c". Pass the object list through
+# a response file instead of the command line.
+ifdef CONFIG_MODVERSIONS
+  link_multi_symversions =					\
+	rm -f $@.symversions;					\
+	for i in $$(cat $@.objlist); do				\
+		if [ -f $$i.symversions ]; then			\
+			cat $$i.symversions >> $@.symversions;	\
+		fi;						\
+	done;
+endif
+cmd_link_multi-y = $(file >$@.objlist,$(link_multi_deps))	\
+	$(link_multi_symversions)				\
+	rm -f $@; $(AR) rcSTP$(KBUILD_ARFLAGS) $@ @$@.objlist	\
+	$(update_lto_symtable)
+else
 cmd_link_multi-y = $(update_lto_symversions) \
 	rm -f $@; $(AR) rcSTP$(KBUILD_ARFLAGS) $@ $(link_multi_deps) \
 	$(update_lto_symtable)
+endif
 
 quiet_cmd_link_multi-m = LD [M]  $@
 

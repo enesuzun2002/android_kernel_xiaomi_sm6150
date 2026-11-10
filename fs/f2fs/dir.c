@@ -95,7 +95,7 @@ int f2fs_init_casefolded_name(const struct inode *dir,
 		if ((int)fname->cf_name.len <= 0) {
 			kmem_cache_free(f2fs_cf_name_slab, fname->cf_name.name);
 			fname->cf_name.name = NULL;
-			if (sb_has_strict_encoding(sb))
+			if (sb_has_enc_strict_mode(sb))
 				return -EINVAL;
 			/* fall back to treating name as opaque byte sequence */
 		}
@@ -117,7 +117,7 @@ static int __f2fs_setup_filename(const struct inode *dir,
 #ifdef CONFIG_FS_ENCRYPTION
 	fname->crypto_buf = crypt_name->crypto_buf;
 #endif
-	if (crypt_name->is_nokey_name) {
+	if (crypt_name->is_ciphertext_name) {
 		/* hash was decoded from the no-key name */
 		fname->hash = cpu_to_le32(crypt_name->hash);
 	} else {
@@ -248,7 +248,7 @@ static int f2fs_match_ci_name(const struct inode *dir, const struct qstr *name,
 	 * In strict mode, ignore invalid names.  In non-strict mode,
 	 * fall back to treating them as opaque byte sequences.
 	 */
-	if (res < 0 && !sb_has_strict_encoding(sb)) {
+	if (res < 0 && !sb_has_enc_strict_mode(sb)) {
 		res = name->len == entry.len &&
 				memcmp(name->name, entry.name, name->len) == 0;
 	} else {
@@ -600,7 +600,7 @@ struct page *f2fs_init_inode_metadata(struct inode *inode, struct inode *dir,
 			goto put_error;
 
 		if (IS_ENCRYPTED(inode)) {
-			err = fscrypt_set_context(inode, page);
+			err = fscrypt_inherit_context(dir, inode, page, false);
 			if (err)
 				goto put_error;
 		}
@@ -1100,11 +1100,11 @@ static int f2fs_readdir(struct file *file, struct dir_context *ctx)
 	int err = 0;
 
 	if (IS_ENCRYPTED(inode)) {
-		err = fscrypt_prepare_readdir(inode);
+		err = fscrypt_get_encryption_info(inode);
 		if (err)
 			goto out;
 
-		err = fscrypt_fname_alloc_buffer(F2FS_NAME_LEN, &fstr);
+		err = fscrypt_fname_alloc_buffer(inode, F2FS_NAME_LEN, &fstr);
 		if (err < 0)
 			goto out;
 	}

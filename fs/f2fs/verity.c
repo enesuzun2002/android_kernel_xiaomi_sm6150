@@ -275,8 +275,12 @@ static void f2fs_merkle_tree_readahead(struct address_space *mapping,
 	struct blk_plug plug;
 
 	for (index = start_index; index < start_index + count; index++) {
-		page = xa_load(&mapping->i_pages, index);
-		if (!page || xa_is_value(page)) {
+		page = find_get_page(mapping, index);
+		if (page) {
+			put_page(page);
+			continue;
+		}
+		{
 			page = __page_cache_alloc(readahead_gfp_mask(mapping));
 			if (!page)
 				break;

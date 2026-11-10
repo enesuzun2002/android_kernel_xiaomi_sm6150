@@ -163,7 +163,10 @@ struct f2fs_mount_info {
 					 * be aligned to this unit: block,
 					 * segment or section
 					 */
-	struct fscrypt_dummy_policy dummy_enc_policy; /* test dummy encryption */
+	struct fscrypt_dummy_context dummy_enc_ctx; /* test dummy encryption */
+#ifdef CONFIG_FS_ENCRYPTION
+	bool inlinecrypt;		/* inline encryption enabled */
+#endif
 	block_t unusable_cap_perc;	/* percentage for cap */
 	block_t unusable_cap;		/* Amount of space allowed to be
 					 * unusable when disabling checkpoint
@@ -1486,6 +1489,13 @@ static inline void clear_page_private_data(struct page *page)
 		}
 	}
 }
+
+#ifdef CONFIG_FS_ENCRYPTION
+#define DUMMY_ENCRYPTION_ENABLED(sbi) \
+	(unlikely(F2FS_OPTION(sbi).dummy_enc_ctx.ctx != NULL))
+#else
+#define DUMMY_ENCRYPTION_ENABLED(sbi) (0)
+#endif
 
 /* For compression */
 enum compress_algorithm_type {
@@ -3444,43 +3454,6 @@ static inline bool __is_valid_data_blkaddr(block_t blkaddr)
 	return true;
 }
 
-/**
- * attach_page_private - Attach private data to a page.
- * @page: Page to attach data to.
- * @data: Data to attach to page.
- *
- * Attaching private data to a page increments the page's reference count.
- * The data must be detached before the page will be freed.
- */
-static inline void attach_page_private(struct page *page, void *data)
-{
-	get_page(page);
-	set_page_private(page, (unsigned long)data);
-	SetPagePrivate(page);
-}
-
-/**
- * detach_page_private - Detach private data from a page.
- * @page: Page to detach data from.
- *
- * Removes the data that was previously attached to the page and decrements
- * the refcount on the page.
- *
- * Return: Data that was attached to the page.
- */
-static inline void *detach_page_private(struct page *page)
-{
-	void *data = (void *)page_private(page);
-
-	if (!PagePrivate(page))
-		return NULL;
-	ClearPagePrivate(page);
-	set_page_private(page, 0);
-	put_page(page);
-
-	return data;
-}
-
 /*
  * file.c
  */
@@ -3575,7 +3548,7 @@ bool f2fs_empty_dir(struct inode *dir);
 
 static inline int f2fs_add_link(struct dentry *dentry, struct inode *inode)
 {
-	if (fscrypt_is_nokey_name(dentry))
+	if (dentry->d_flags & DCACHE_ENCRYPTED_NAME)
 		return -ENOKEY;
 	return f2fs_do_add_link(d_inode(dentry->d_parent), &dentry->d_name,
 				inode, inode->i_ino, inode->i_mode);
@@ -4257,6 +4230,22 @@ static inline void f2fs_set_encrypted_inode(struct inode *inode)
 	file_set_encrypt(inode);
 	f2fs_set_inode_flags(inode);
 #endif
+}
+
+static inline bool f2fs_may_encrypt(struct inode *dir, struct inode *inode)
+{
+#ifdef CONFIG_FS_ENCRYPTION
+	struct f2fs_sb_info *sbi = F2FS_I_SB(dir);
+	umode_t mode = inode->i_mode;
+
+	/*
+	 * If the directory encrypted or dummy encryption enabled,
+	 * then we should encrypt the inode.
+	 */
+	if (IS_ENCRYPTED(dir) || DUMMY_ENCRYPTION_ENABLED(sbi))
+		return (S_ISREG(mode) || S_ISDIR(mode) || S_ISLNK(mode));
+#endif
+	return false;
 }
 
 /*

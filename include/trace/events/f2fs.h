@@ -73,7 +73,15 @@ TRACE_DEFINE_ENUM(EX_BLOCK_AGE);
 #define show_bio_type(op,op_flags)	show_bio_op(op),		\
 						show_bio_op_flags(op_flags)
 
-#define show_bio_op(op)		blk_op_str(op)
+#define show_bio_op(op)						\
+	__print_symbolic(op,					\
+		{ REQ_OP_READ, "READ" },				\
+		{ REQ_OP_WRITE, "WRITE" },				\
+		{ REQ_OP_FLUSH, "FLUSH" },				\
+		{ REQ_OP_DISCARD, "DISCARD" },				\
+		{ REQ_OP_SECURE_ERASE, "SECURE_ERASE" },		\
+		{ REQ_OP_WRITE_SAME, "WRITE_SAME" },			\
+		{ REQ_OP_WRITE_ZEROES, "WRITE_ZEROES" })
 
 #define show_bio_op_flags(flags)					\
 	__print_flags(F2FS_BIO_FLAG_MASK(flags), "|",			\

@@ -34,6 +34,15 @@
 #include <trace/events/f2fs.h>
 #include <uapi/linux/f2fs.h>
 
+#ifndef FSLABEL_MAX
+#define FSLABEL_MAX 256
+#endif
+
+#ifndef FS_IOC_GETFSLABEL
+#define FS_IOC_GETFSLABEL _IOR(0x94, 49, char[FSLABEL_MAX])
+#define FS_IOC_SETFSLABEL _IOW(0x94, 50, char[FSLABEL_MAX])
+#endif
+
 static vm_fault_t f2fs_filemap_fault(struct vm_fault *vmf)
 {
 	struct inode *inode = file_inode(vmf->vma->vm_file);
@@ -399,9 +408,18 @@ static bool __found_offset(struct address_space *mapping, block_t blkaddr,
 	case SEEK_DATA:
 		if (__is_valid_data_blkaddr(blkaddr))
 			return true;
-		if (blkaddr == NEW_ADDR &&
-		    xa_get_mark(&mapping->i_pages, index, PAGECACHE_TAG_DIRTY))
-			return true;
+		if (blkaddr == NEW_ADDR) {
+			struct page *page;
+			pgoff_t dirty_index = index;
+
+			if (find_get_pages_tag(mapping, &dirty_index,
+					PAGECACHE_TAG_DIRTY, 1, &page) > 0) {
+				bool dirty = page->index == index;
+				put_page(page);
+				if (dirty)
+					return true;
+			}
+		}
 		break;
 	case SEEK_HOLE:
 		if (blkaddr == NULL_ADDR)
@@ -863,16 +881,16 @@ static void __setattr_copy(struct inode *inode, const struct iattr *attr)
 	if (ia_valid & ATTR_GID)
 		inode->i_gid = attr->ia_gid;
 	if (ia_valid & ATTR_ATIME) {
-		inode->i_atime = timestamp_truncate(attr->ia_atime,
-						  inode);
+		inode->i_atime = timespec64_trunc(attr->ia_atime,
+						  inode->i_sb->s_time_gran);
 	}
 	if (ia_valid & ATTR_MTIME) {
-		inode->i_mtime = timestamp_truncate(attr->ia_mtime,
-						  inode);
+		inode->i_mtime = timespec64_trunc(attr->ia_mtime,
+						  inode->i_sb->s_time_gran);
 	}
 	if (ia_valid & ATTR_CTIME) {
-		inode->i_ctime = timestamp_truncate(attr->ia_ctime,
-						  inode);
+		inode->i_ctime = timespec64_trunc(attr->ia_ctime,
+						  inode->i_sb->s_time_gran);
 	}
 	if (ia_valid & ATTR_MODE) {
 		umode_t mode = attr->ia_mode;
@@ -1782,7 +1800,9 @@ static long f2fs_fallocate(struct file *file, int mode,
 
 	inode_lock(inode);
 
-	ret = file_modified(file);
+	ret = file_remove_privs(file);
+	if (!ret)
+		ret = file_update_time(file);
 	if (ret)
 		goto out;
 
@@ -3391,14 +3411,6 @@ static int f2fs_ioc_measure_verity(struct file *filp, unsigned long arg)
 	return fsverity_ioctl_measure(filp, (void __user *)arg);
 }
 
-static int f2fs_ioc_read_verity_metadata(struct file *filp, unsigned long arg)
-{
-	if (!f2fs_sb_has_verity(F2FS_I_SB(file_inode(filp))))
-		return -EOPNOTSUPP;
-
-	return fsverity_ioctl_read_metadata(filp, (const void __user *)arg);
-}
-
 static int f2fs_ioc_getfslabel(struct file *filp, unsigned long arg)
 {
 	struct inode *inode = file_inode(filp);
@@ -4316,8 +4328,6 @@ static long __f2fs_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 		return f2fs_ioc_enable_verity(filp, arg);
 	case FS_IOC_MEASURE_VERITY:
 		return f2fs_ioc_measure_verity(filp, arg);
-	case FS_IOC_READ_VERITY_METADATA:
-		return f2fs_ioc_read_verity_metadata(filp, arg);
 	case FS_IOC_GETFSLABEL:
 		return f2fs_ioc_getfslabel(filp, arg);
 	case FS_IOC_SETFSLABEL:
@@ -4577,40 +4587,6 @@ out:
 	return ret;
 }
 
-static int f2fs_file_fadvise(struct file *filp, loff_t offset, loff_t len,
-		int advice)
-{
-	struct address_space *mapping;
-	struct backing_dev_info *bdi;
-	struct inode *inode = file_inode(filp);
-	int err;
-
-	if (advice == POSIX_FADV_SEQUENTIAL) {
-		if (S_ISFIFO(inode->i_mode))
-			return -ESPIPE;
-
-		mapping = filp->f_mapping;
-		if (!mapping || len < 0)
-			return -EINVAL;
-
-		bdi = inode_to_bdi(mapping->host);
-		filp->f_ra.ra_pages = bdi->ra_pages *
-			F2FS_I_SB(inode)->seq_file_ra_mul;
-		spin_lock(&filp->f_lock);
-		filp->f_mode &= ~FMODE_RANDOM;
-		spin_unlock(&filp->f_lock);
-		return 0;
-	}
-
-	err = generic_fadvise(filp, offset, len, advice);
-	if (!err && advice == POSIX_FADV_DONTNEED &&
-		test_opt(F2FS_I_SB(inode), COMPRESS_CACHE) &&
-		f2fs_compressed_file(inode))
-		f2fs_invalidate_compress_pages(F2FS_I_SB(inode), inode->i_ino);
-
-	return err;
-}
-
 #ifdef CONFIG_COMPAT
 struct compat_f2fs_gc_range {
 	u32 sync;
@@ -4712,7 +4688,6 @@ long f2fs_compat_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 	case F2FS_IOC_RESIZE_FS:
 	case FS_IOC_ENABLE_VERITY:
 	case FS_IOC_MEASURE_VERITY:
-	case FS_IOC_READ_VERITY_METADATA:
 	case FS_IOC_GETFSLABEL:
 	case FS_IOC_SETFSLABEL:
 	case F2FS_IOC_GET_COMPRESS_BLOCKS:
@@ -4747,5 +4722,4 @@ const struct file_operations f2fs_file_operations = {
 #endif
 	.splice_read	= generic_file_splice_read,
 	.splice_write	= iter_file_splice_write,
-	.fadvise	= f2fs_file_fadvise,
 };

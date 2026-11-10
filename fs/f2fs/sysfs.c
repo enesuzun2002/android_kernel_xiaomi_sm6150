@@ -1172,7 +1172,7 @@ static const struct sysfs_ops f2fs_attr_ops = {
 };
 
 static struct kobj_type f2fs_sb_ktype = {
-	.default_groups = f2fs_groups,
+	.default_attrs	= f2fs_attrs,
 	.sysfs_ops	= &f2fs_attr_ops,
 	.release	= f2fs_sb_release,
 };
@@ -1186,7 +1186,7 @@ static struct kset f2fs_kset = {
 };
 
 static struct kobj_type f2fs_feat_ktype = {
-	.default_groups = f2fs_feat_groups,
+	.default_attrs	= f2fs_feat_attrs,
 	.sysfs_ops	= &f2fs_attr_ops,
 };
 
@@ -1227,7 +1227,7 @@ static const struct sysfs_ops f2fs_stat_attr_ops = {
 };
 
 static struct kobj_type f2fs_stat_ktype = {
-	.default_groups = f2fs_stat_groups,
+	.default_attrs	= f2fs_stat_attrs,
 	.sysfs_ops	= &f2fs_stat_attr_ops,
 	.release	= f2fs_stat_kobj_release,
 };
@@ -1254,7 +1254,7 @@ static const struct sysfs_ops f2fs_feature_list_attr_ops = {
 };
 
 static struct kobj_type f2fs_feature_list_ktype = {
-	.default_groups = f2fs_sb_feat_groups,
+	.default_attrs	= f2fs_sb_feat_attrs,
 	.sysfs_ops	= &f2fs_feature_list_attr_ops,
 	.release	= f2fs_feature_list_kobj_release,
 };
@@ -1430,6 +1430,7 @@ int f2fs_register_sysfs(struct f2fs_sb_info *sbi)
 		sbi->s_proc = proc_mkdir(sb->s_id, f2fs_proc_root);
 
 	if (sbi->s_proc) {
+#if 0 /* proc_create_single_data() is not available in Android 4.14 */
 		proc_create_single_data("segment_info", 0444, sbi->s_proc,
 				segment_info_seq_show, sb);
 		proc_create_single_data("segment_bits", 0444, sbi->s_proc,
@@ -1442,6 +1443,7 @@ int f2fs_register_sysfs(struct f2fs_sb_info *sbi)
 				victim_bits_seq_show, sb);
 		proc_create_single_data("discard_plist_info", 0444, sbi->s_proc,
 				discard_plist_seq_show, sb);
+#endif
 	}
 	return 0;
 put_feature_list_kobj:

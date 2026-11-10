@@ -517,12 +517,12 @@ static int f2fs_set_test_dummy_encryption(struct super_block *sb,
 	 * needed to allow it to be set or changed during remount.  We do allow
 	 * it to be specified during remount, but only if there is no change.
 	 */
-	if (is_remount && !F2FS_OPTION(sbi).dummy_enc_policy.policy) {
+	if (is_remount && !F2FS_OPTION(sbi).dummy_enc_ctx.ctx) {
 		f2fs_warn(sbi, "Can't set test_dummy_encryption on remount");
 		return -EINVAL;
 	}
 	err = fscrypt_set_test_dummy_encryption(
-		sb, arg->from, &F2FS_OPTION(sbi).dummy_enc_policy);
+		sb, arg, &F2FS_OPTION(sbi).dummy_enc_ctx);
 	if (err) {
 		if (err == -EEXIST)
 			f2fs_warn(sbi,
@@ -1028,7 +1028,7 @@ static int parse_options(struct super_block *sb, char *options, bool is_remount)
 			break;
 		case Opt_inlinecrypt:
 #ifdef CONFIG_FS_ENCRYPTION_INLINE_CRYPT
-			sb->s_flags |= SB_INLINECRYPT;
+			F2FS_OPTION(sbi).inlinecrypt = true;
 #else
 			f2fs_info(sbi, "inline encryption not supported");
 #endif
@@ -1633,7 +1633,7 @@ static void f2fs_put_super(struct super_block *sb)
 	for (i = 0; i < MAXQUOTAS; i++)
 		kfree(F2FS_OPTION(sbi).s_qf_names[i]);
 #endif
-	fscrypt_free_dummy_policy(&F2FS_OPTION(sbi).dummy_enc_policy);
+	fscrypt_free_dummy_context(&F2FS_OPTION(sbi).dummy_enc_ctx);
 	destroy_percpu_info(sbi);
 	f2fs_destroy_iostat(sbi);
 	for (i = 0; i < NR_PAGE_TYPE; i++)
@@ -2013,8 +2013,10 @@ static int f2fs_show_options(struct seq_file *seq, struct dentry *root)
 
 	fscrypt_show_test_dummy_encryption(seq, ',', sbi->sb);
 
-	if (sbi->sb->s_flags & SB_INLINECRYPT)
+#ifdef CONFIG_FS_ENCRYPTION
+	if (F2FS_OPTION(sbi).inlinecrypt)
 		seq_puts(seq, ",inlinecrypt");
+#endif
 
 	if (F2FS_OPTION(sbi).alloc_mode == ALLOC_MODE_DEFAULT)
 		seq_printf(seq, ",alloc_mode=%s", "default");
@@ -2074,7 +2076,9 @@ static void default_options(struct f2fs_sb_info *sbi)
 	F2FS_OPTION(sbi).bggc_mode = BGGC_MODE_ON;
 	F2FS_OPTION(sbi).memory_mode = MEMORY_MODE_NORMAL;
 
-	sbi->sb->s_flags &= ~SB_INLINECRYPT;
+#ifdef CONFIG_FS_ENCRYPTION
+	F2FS_OPTION(sbi).inlinecrypt = false;
+#endif
 
 	set_opt(sbi, INLINE_XATTR);
 	set_opt(sbi, INLINE_DATA);
@@ -3062,9 +3066,10 @@ static int f2fs_set_context(struct inode *inode, const void *ctx, size_t len,
 				ctx, len, fs_data, XATTR_CREATE);
 }
 
-static const union fscrypt_policy *f2fs_get_dummy_policy(struct super_block *sb)
+static const union fscrypt_context *
+f2fs_get_dummy_context(struct super_block *sb)
 {
-	return F2FS_OPTION(F2FS_SB(sb)).dummy_enc_policy.policy;
+	return F2FS_OPTION(F2FS_SB(sb)).dummy_enc_ctx.ctx;
 }
 
 static bool f2fs_has_stable_inodes(struct super_block *sb)
@@ -3077,6 +3082,11 @@ static void f2fs_get_ino_and_lblk_bits(struct super_block *sb,
 {
 	*ino_bits_ret = 8 * sizeof(nid_t);
 	*lblk_bits_ret = 8 * sizeof(block_t);
+}
+
+static bool f2fs_inline_crypt_enabled(struct super_block *sb)
+{
+	return F2FS_OPTION(F2FS_SB(sb)).inlinecrypt;
 }
 
 static int f2fs_get_num_devices(struct super_block *sb)
@@ -3102,10 +3112,12 @@ static const struct fscrypt_operations f2fs_cryptops = {
 	.key_prefix		= "f2fs:",
 	.get_context		= f2fs_get_context,
 	.set_context		= f2fs_set_context,
-	.get_dummy_policy	= f2fs_get_dummy_policy,
+	.get_dummy_context	= f2fs_get_dummy_context,
 	.empty_dir		= f2fs_empty_dir,
+	.max_namelen		= F2FS_NAME_LEN,
 	.has_stable_inodes	= f2fs_has_stable_inodes,
 	.get_ino_and_lblk_bits	= f2fs_get_ino_and_lblk_bits,
+	.inline_crypt_enabled	= f2fs_inline_crypt_enabled,
 	.get_num_devices	= f2fs_get_num_devices,
 	.get_devices		= f2fs_get_devices,
 };
@@ -4587,7 +4599,7 @@ free_options:
 	for (i = 0; i < MAXQUOTAS; i++)
 		kfree(F2FS_OPTION(sbi).s_qf_names[i]);
 #endif
-	fscrypt_free_dummy_policy(&F2FS_OPTION(sbi).dummy_enc_policy);
+	fscrypt_free_dummy_context(&F2FS_OPTION(sbi).dummy_enc_ctx);
 	kvfree(options);
 free_sb_buf:
 	kfree(raw_super);

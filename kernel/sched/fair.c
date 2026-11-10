@@ -2942,7 +2942,11 @@ static inline void cfs_rq_util_change(struct cfs_rq *cfs_rq)
 #ifdef CONFIG_SMP
 /*
  * Approximate:
- *   val * y^n,    where y^32 ~= 0.5 (~1 scheduling period)
+ *   val * y^n, where y^LOAD_AVG_PERIOD ~= 0.5 (one PELT half-life).
+ *
+ * LOAD_AVG_PERIOD and the corresponding runnable_avg_yN_inv table are
+ * selected together by Kconfig.  In particular, SCHED_PELT_12MS uses the
+ * 12ms decay table rather than the historical 32ms table.
  */
 static u64 decay_load(u64 val, u64 n)
 {

@@ -1,6 +1,8 @@
 /* SPDX-License-Identifier: GPL-2.0 */
 
 #include <linux/sched.h>
+
+/* PELT decay constants are selected by CONFIG_SCHED_PELT_12MS and friends. */
 #include <linux/sched/autogroup.h>
 #include <linux/sched/sysctl.h>
 #include <linux/sched/topology.h>

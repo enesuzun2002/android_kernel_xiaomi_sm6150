@@ -43,6 +43,20 @@ config ANDROID_LOW_MEMORY_KILLER_AUTODETECT_OOM_ADJ_VALUES
 	  /sys/module/lowmemorykiller/parameters/adj and convert them
 	  to oom_score_adj values.
 
+config SIMPLE_LMK
+	bool "Simple Low Memory Killer"
+	select HAVE_LOW_MEMORY_KILLER
+	help
+	  Use the Android low-memory shrinker with a single, pre-registered
+	  watermark path.  This replaces the legacy lowmemorykiller option and
+	  keeps memory-pressure handling in the reclaim path.
+
+config SIMPLE_LMK_AGGRESSIVE
+	bool "Aggressive Simple Low Memory Killer policy"
+	depends on SIMPLE_LMK
+	help
+	  Enable the aggressive watermark policy used by interactive devices.
+
 source "drivers/staging/android/ion/Kconfig"
 
 endif # if ANDROID

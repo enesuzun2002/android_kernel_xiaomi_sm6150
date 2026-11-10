@@ -20,6 +20,7 @@
 #include "sched.h"
 
 #define SUGOV_KTHREAD_PRIORITY	50
+#define SUGOV_INTERACTIVE_RATE_LIMIT_US	1000
 
 struct sugov_tunables {
 	struct gov_attr_set attr_set;
@@ -132,6 +133,15 @@ static bool sugov_should_update_freq(struct sugov_policy *sg_policy, u64 time)
 
 	delta_ns = time - sg_policy->last_freq_update_time;
 	return delta_ns >= sg_policy->min_rate_limit_ns;
+}
+
+/* Wakeups carrying a boost signal must not wait for the normal rate limit. */
+static inline void sugov_mark_fast_update(struct sugov_policy *sg_policy,
+					  unsigned int flags)
+{
+	if (flags & (SCHED_CPUFREQ_IOWAIT | SCHED_CPUFREQ_CONTINUE |
+			     SCHED_CPUFREQ_INTERCLUSTER_MIG))
+		sg_policy->need_freq_update = true;
 }
 
 static bool sugov_up_down_rate_limit(struct sugov_policy *sg_policy, u64 time,
@@ -423,6 +433,7 @@ static void sugov_update_single(struct update_util_data *hook, u64 time,
 
 	flags &= ~SCHED_CPUFREQ_RT_DL;
 	sugov_set_iowait_boost(sg_cpu, time, flags);
+	sugov_mark_fast_update(sg_policy, flags);
 	sg_cpu->last_update = time;
 
 	if (!sugov_should_update_freq(sg_policy, time))
@@ -555,6 +566,7 @@ static void sugov_update_shared(struct update_util_data *hook, u64 time,
 	sg_cpu->util = util;
 	sg_cpu->max = max;
 	sg_cpu->flags = flags;
+	sugov_mark_fast_update(sg_policy, flags);
 
 	sugov_set_iowait_boost(sg_cpu, time, flags);
 	sg_cpu->last_update = time;
@@ -972,10 +984,13 @@ static int sugov_init(struct cpufreq_policy *policy)
 		goto stop_kthread;
 	}
 
-	tunables->up_rate_limit_us =
-				cpufreq_policy_transition_delay_us(policy);
-	tunables->down_rate_limit_us =
-				cpufreq_policy_transition_delay_us(policy);
+	/* Keep normal transitions responsive; boost/iowait updates bypass this. */
+	tunables->up_rate_limit_us = min_t(unsigned int,
+			cpufreq_policy_transition_delay_us(policy),
+			SUGOV_INTERACTIVE_RATE_LIMIT_US);
+	tunables->down_rate_limit_us = min_t(unsigned int,
+			cpufreq_policy_transition_delay_us(policy),
+			SUGOV_INTERACTIVE_RATE_LIMIT_US);
 	tunables->hispeed_load = DEFAULT_HISPEED_LOAD;
 	tunables->hispeed_freq = 0;
 

@@ -630,13 +630,11 @@ int kgsl_drawobj_cmd_add_ibdesc(struct kgsl_device *device,
 	/* sanitize the ibdesc ctrl flags */
 	ibdesc->ctrl &= KGSL_IBDESC_MEMLIST | KGSL_IBDESC_PROFILING_BUFFER;
 
-	if (drawobj->flags & KGSL_DRAWOBJ_MEMLIST &&
-			ibdesc->ctrl & KGSL_IBDESC_MEMLIST) {
-		if (ibdesc->ctrl & KGSL_IBDESC_PROFILING_BUFFER) {
-			add_profiling_buffer(device, cmdobj,
-					gpuaddr, size, 0, 0);
-			return 0;
-		}
+	if (unlikely((drawobj->flags & KGSL_DRAWOBJ_MEMLIST) &&
+			(ibdesc->ctrl & KGSL_IBDESC_MEMLIST) &&
+			(ibdesc->ctrl & KGSL_IBDESC_PROFILING_BUFFER))) {
+		add_profiling_buffer(device, cmdobj, gpuaddr, size, 0, 0);
+		return 0;
 	}
 
 	/* Ignore if SYNC or MARKER is specified */

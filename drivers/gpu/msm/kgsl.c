@@ -1746,7 +1746,7 @@ long kgsl_ioctl_rb_issueibcmds(struct kgsl_device_private *dev_priv,
 	if (context == NULL)
 		return -EINVAL;
 
-	if (_check_context_is_sparse(context, param->flags)) {
+	if (unlikely(_check_context_is_sparse(context, param->flags))) {
 		kgsl_context_put(context);
 		return -EINVAL;
 	}
@@ -1846,7 +1846,7 @@ long kgsl_ioctl_submit_commands(struct kgsl_device_private *dev_priv,
 	if (context == NULL)
 		return -EINVAL;
 
-	if (_check_context_is_sparse(context, param->flags)) {
+	if (unlikely(_check_context_is_sparse(context, param->flags))) {
 		kgsl_context_put(context);
 		return -EINVAL;
 	}

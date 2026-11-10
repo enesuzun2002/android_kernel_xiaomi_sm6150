@@ -43,8 +43,7 @@
 #include <linux/inetdevice.h>
 #include <net/addrconf.h>
 
-#define DEBUG
-#define NEIGH_DEBUG 1
+#define NEIGH_DEBUG 0
 #define neigh_dbg(level, fmt, ...)		\
 do {						\
 	if (level <= NEIGH_DEBUG)		\
@@ -3317,4 +3316,3 @@ static int __init neigh_init(void)
 }
 
 subsys_initcall(neigh_init);
-

@@ -295,6 +295,9 @@ void kgsl_pwrctrl_buslevel_update(struct kgsl_device *device,
 	if (on) {
 		buslevel = min_t(int, pwr->pwrlevels[0].bus_max,
 				cur + pwr->bus_mod);
+		/* Keep the bus at least at the active level's floor. */
+		buslevel = max_t(int, buslevel,
+				pwr->pwrlevels[pwr->active_pwrlevel].bus_min);
 		buslevel = max_t(int, buslevel, 1);
 	} else {
 		/* If the bus is being turned off, reset to default level */

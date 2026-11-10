@@ -15,6 +15,21 @@ config ZRAM
 
 	  See Documentation/blockdev/zram.txt for more information.
 
+config ZRAM_DEF_COMP_ZSTD
+	bool "Use zstd as the default zRAM compressor"
+	depends on ZRAM
+	select CRYPTO_ZSTD
+	help
+	  Use zstd as the default compressor for zRAM. zstd provides better
+	  compression ratios than lzo at the cost of additional CPU time.
+
+config ZRAM_MULTI_COMP
+	bool "Enable multiple compression streams"
+	depends on ZRAM
+	help
+	  Enable concurrent per-CPU compression streams. This allows zRAM
+	  write operations on different CPUs to compress pages in parallel.
+
 config ZRAM_WRITEBACK
        bool "Write back incompressible or idle page to backing device"
        depends on ZRAM

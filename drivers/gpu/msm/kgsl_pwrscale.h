@@ -18,8 +18,12 @@
 #include <linux/msm_adreno_devfreq.h>
 #include "kgsl_pwrctrl.h"
 
-/* devfreq governor call window in usec */
-#define KGSL_GOVERNOR_CALL_INTERVAL 1000
+/*
+ * devfreq governor call window in usec.  msm-adreno-tz discards samples
+ * until it has accumulated FLOOR (5ms) of time, so calling it more often
+ * than that only adds device mutex contention.
+ */
+#define KGSL_GOVERNOR_CALL_INTERVAL 5000
 
 /* Power events to be tracked with history */
 #define KGSL_PWREVENT_STATE	0

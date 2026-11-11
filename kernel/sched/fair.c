@@ -5365,15 +5365,6 @@ enqueue_task_fair(struct rq *rq, struct task_struct *p, int flags)
 	schedtune_enqueue_task(p, cpu_of(rq));
 
 	/*
-	 * The top-app schedtune group is commonly boosted by userspace just
-	 * before a UI task is queued.  Push that signal through schedutil now,
-	 * instead of waiting for the next tick; this also lets WALT's placement
-	 * code migrate the task to a suitable core immediately.
-	 */
-	if (schedtune_task_boost(p) > 0)
-		cpufreq_update_util(rq, SCHED_CPUFREQ_CONTINUE);
-
-	/*
 	 * If in_iowait is set, the code below may not trigger any cpufreq
 	 * utilization updates, so do it here explicitly with the IOWAIT flag
 	 * passed.
